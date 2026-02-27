@@ -1,0 +1,38 @@
+server:
+  port: 8080  # 后端端口，避免与前端冲突
+  servlet:
+    session:
+      timeout: 18000s  # 设置会话超时时间为30分钟
+      cookie:
+        max-age: 18000  # Cookie有效期30分钟
+        http-only: true  # 防止JavaScript访问Cookie
+        secure: false  # 开发环境使用HTTP，生产环境应设为true
+
+spring:
+  main:
+    allow-circular-references: true
+  # 静态资源配置
+  web:
+    resources:
+      static-locations: classpath:/static/,classpath:/public/,file:./frontend/src/assets/
+  # 数据库配置（关联 MySQL 和 phpMyAdmin 中的数据库）
+  datasource:
+    url: jdbc:mysql://localhost:3306/game_community?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: root  
+    password: root  
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # JPA 配置（自动生成 SQL 与表映射，简化数据操作）
+  jpa:
+    hibernate:
+      ddl-auto: update  # 自动创建/更新表结构，适合开发环境
+    show-sql: false    # 关闭控制台打印 SQL，减少调试信息
+    properties:
+      hibernate:
+        format_sql: false  # 关闭 SQL 格式化显示
+        dialect: org.hibernate.dialect.MySQL5InnoDBDialect  # 明确指定MySQL方言
+
+  # Spring Security 配置（简化版用 Session 认证，不用 JWT）
+  security:
+    user:
+      enabled: false  # 关闭默认用户，用自定义用户表
