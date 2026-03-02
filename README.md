@@ -145,6 +145,16 @@ npm run dev
 | `/api/questions` | GET | 获取问答列表 |
 | `/api/private-messages/send` | POST | 发送私信 |
 
+详细 API 文档请参考项目中的接口定义。
 
+## 🤝 贡献指南
 
+欢迎提交 Issue 和 Pull Request 来帮助改进项目。
 
+## 📄 许可证
+
+本项目仅供学习交流使用。
+
+---
+
+⭐ 如果这个项目对你有帮助，欢迎 Star 支持！
