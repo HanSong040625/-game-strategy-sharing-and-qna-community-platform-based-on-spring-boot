@@ -1,5 +1,6 @@
 package com.huadetec.gamecommunity.service;
 
+import com.huadetec.gamecommunity.RedisCacheUtil;
 import com.huadetec.gamecommunity.entity.User;
 import com.huadetec.gamecommunity.repository.UserRepository;
 import com.huadetec.gamecommunity.service.AdminService;
@@ -28,7 +29,15 @@ public class UserService {
     
     @Autowired
     private UserRepository userRepository;
-    
+
+    @Autowired
+    private RedisCacheUtil redisCacheUtil ;
+
+    //缓存键前缀
+    private static final String user_list_prefix = "user:list:" ;
+    //用户总数
+    private static final String user_count_prefix = "user:count:" ;//final 修饰的变量一经被赋值就不可更改，静态修饰的变量可以直接通过类名访问
+    private static final int cache_expire_time = 3600 ; //缓存过期时间（秒）过期机制基于设置缓存时开始计算，3600秒后不管该键是否被查询都会被清除
     @Autowired
     private EntityManager entityManager;
     
@@ -37,6 +46,8 @@ public class UserService {
     
     @Autowired
     private AdminService adminService;
+
+
 
     /**
      * 用户注册
@@ -189,15 +200,48 @@ public class UserService {
         return userRepository.findAll();
     }
     public Page<User> findAllUsers(int page, int pageSize){
+        String cacheKey = user_list_prefix + page + ":" + pageSize ;
+        try {
+            Object cachedData = redisCacheUtil.get(cacheKey) ;//尝试从缓存中获取键值对
+            if(cachedData != null){
+                // 尝试将缓存数据转换为用户列表（list类型）
+                List<User> userList = null;
+                if(cachedData instanceof List){
+                    //instanceof：二元运算符，检查一个对象是否是某个类的实例，是返回true，不是返回false
+                    userList = (List<User>) cachedData;//cachedData本质上还是object类型，需要强制转换
+                    // 创建一个简单的Page实现返回
+                    Pageable pageable = PageRequest.of(page - 1, pageSize);
+                    long total = countAllUsers();
+                    logger.info("从Redis缓存中获取用户列表，页码：{}，每页大小：{}", page, pageSize);
+                    return new org.springframework.data.domain.PageImpl<>(userList, pageable, total);
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Redis缓存查询失败: {}", e.getMessage());
+        }
+        //缓存未命中或类型转换失败，从数据库查询
+        logger.info("从数据库中查询用户列表，页码：{}，每页大小：{}", page, pageSize);
         Pageable pageable = PageRequest.of(page - 1, pageSize);
         //Pageable 是 Spring Data 中表示分页请求的接口
         //PageRequest.of传入参数起始页码和每页大小，并把这些数据赋值给Pageable类型对象
-        Page<User> userPage = userRepository.findAll(pageable) ;
-        //findAll是JpaRepository类的标准方法,userRepository继承自JpaRepository类
-        //pageable记录了起始页和每页大小，findall方法会根据 pageable的信息进行排序，计算出每条数据应该在第几页第几条
+        Page<User> userPage = userRepository.findAll(pageable) ;//过去page对象
+
+        //存入缓存 - 只存储用户列表，不存储Page对象
+        try {
+            redisCacheUtil.set(cacheKey , userPage.getContent() , cache_expire_time) ;
+            //userPage.getContent()获取当前分页对象中的数据列表，这里只存储数据列表，所以到缓存中是list类型
+            logger.info("用户列表已存入Redis缓存，页码：{}，每页大小：{}", page, pageSize);
+        } catch (Exception e) {
+            logger.error("Redis缓存存储失败: {}", e.getMessage());
+        }
 
         return userPage ;
     }
+
+
+
+
+    
     
     /**
      * 更新用户在线状态和最后登录时间
@@ -308,23 +352,11 @@ public class UserService {
     @Transactional
     public User save(User user) {
         try {
-            logger.info("开始保存用户信息：用户ID={}, 用户名={}, 当前isBanned值={}, hashCode={}", 
-                user.getId(), user.getUsername(), user.getIsBanned(), user.hashCode());
-            
-            // 打印保存前的用户完整信息
-            logger.info("保存前用户详细信息：isBanned={}, lastLogin={}, email={}", 
-                user.getIsBanned(), user.getLastLogin(), user.getEmail());
-            
-            // 显式调用repository的save方法
             User savedUser = userRepository.save(user);
-            
-            logger.info("保存操作完成，返回保存后的用户对象：用户ID={}, 用户名={}, isBanned值={}, hashCode={}", 
-                savedUser.getId(), savedUser.getUsername(), savedUser.getIsBanned(), savedUser.hashCode());
-            
-            // 验证保存结果
-            logger.info("保存后用户详细信息：isBanned={}, lastLogin={}, email={}", 
-                savedUser.getIsBanned(), savedUser.getLastLogin(), savedUser.getEmail());
-            
+
+            //清除相关缓存
+            redisCacheUtil.deletePattern(user_list_prefix + "*");
+            redisCacheUtil.delete(user_count_prefix);
             return savedUser;
         } catch (Exception e) {
             logger.error("保存用户信息失败：用户名={}, 异常信息={}", user.getUsername(), e.getMessage(), e);
@@ -339,33 +371,53 @@ public class UserService {
      * @return 用户总数
      */
     public long countAllUsers() {
-        logger.info("开始统计用户总数...");
         try {
-            // 验证userRepository是否正确注入
-            if (userRepository == null) {
-                logger.error("userRepository注入失败，无法统计用户数量");
-                return 0;
-            }
-            
-            // 执行数据库查询
-            long count = userRepository.count();
-            logger.info("用户总数查询成功，结果: {}", count);
-            
-            // 如果结果为0，尝试执行原生SQL查询验证数据
-            if (count == 0) {
-                logger.warn("用户总数为0，执行额外查询验证数据");
-                try {
-                    List<User> users = userRepository.findAll();
-                    logger.info("执行findAll查询获取到用户列表，数量: {}", users != null ? users.size() : 0);
-                } catch (Exception ex) {
-                    logger.error("执行findAll查询失败: {}", ex.getMessage());
+            //生成缓存键
+            String cacheKey = user_count_prefix ;
+
+            //尝试从缓存获取
+            Object cachedValue = redisCacheUtil.get(cacheKey) ;
+            if( cachedValue != null){
+                // 处理类型转换，支持Integer和Long
+                if (cachedValue instanceof Integer) {
+                    return ((Integer) cachedValue).longValue();
+                } else if (cachedValue instanceof Long) {
+                    return (Long) cachedValue;
                 }
             }
-            
-            return count;
+            //缓存未命中，从数据库查询
+            Long count = userRepository.count() ;
+            //存入缓存
+            try {
+                redisCacheUtil.set(cacheKey , count ,cache_expire_time ) ;
+            } catch (Exception e) {
+                logger.error("Redis缓存存储失败: {}", e.getMessage());
+            }
+            return count ;
+
         } catch (Exception e) {
             logger.error("统计用户数量失败：{}", e.getMessage(), e);
-            return 0;
+            // 从数据库查询作为备用
+            try {
+                return userRepository.count();
+            } catch (Exception ex) {
+                logger.error("数据库查询用户数量失败：{}", ex.getMessage());
+                return 0;
+            }
         }
     }
+
+    //删除用户（清除相关缓存）
+    public void delete(Long id){
+        userRepository.deleteById(id);
+
+        //清除相关缓存
+        redisCacheUtil.deletePattern(user_list_prefix + "*");
+        redisCacheUtil.delete(user_count_prefix);//保证数据一致性，删除了用户，所以用户总数发生了变化，原先的用户总数必须删除，重新录入缓存
+    }
+
+  
+
+
+    
 }
