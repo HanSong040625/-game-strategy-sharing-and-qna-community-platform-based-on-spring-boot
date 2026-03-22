@@ -352,7 +352,9 @@ export default {
         withCredentials: true
       })
       .then(response => {
-        this.guideInfo = response.data;
+        console.log('攻略详情API响应:', response.data);
+        // 确保从response.data.data中获取攻略数据
+        this.guideInfo = response.data.data;
         this.loading = false;
         
         // 获取攻略详情后，检查用户是否已经点赞了这篇攻略
@@ -644,14 +646,13 @@ export default {
         withCredentials: true
       })
       .then(response => {
-        // 确保返回的数据是数组格式
-        if (Array.isArray(response.data)) {
-          this.commentList = response.data;
-        } else if (response.data && Array.isArray(response.data.comments)) {
-          this.commentList = response.data.comments;
+        console.log('评论API响应:', response.data);
+        // 确保返回的数据是正确的Result格式
+        if (response.data && response.data.data && Array.isArray(response.data.data)) {
+          this.commentList = response.data.data;
         } else {
           this.commentList = [];
-          console.warn('评论数据格式异常');
+          console.warn('评论数据格式异常:', response.data);
         }
         this.loadingComments = false;
       })
@@ -695,9 +696,10 @@ export default {
         withCredentials: true
       })
       .then(response => {
+        console.log('提交评论API响应:', response.data);
         // 添加到评论列表开头
-        if (response.data) {
-          this.commentList.unshift(response.data);
+        if (response.data && response.data.data) {
+          this.commentList.unshift(response.data.data);
         }
         
         // 清空输入框
@@ -735,16 +737,17 @@ export default {
       comment.liking = true;
       
       // 使用实际的后端API点赞
-      this.$axios.post(`/api/comment/${comment.id}/like`, {}, {
+      this.$axios.post(`/api/guide/comment/${comment.id}/like`, {}, {
         withCredentials: true
       })
       .then(response => {
+        console.log('评论点赞API响应:', response.data);
         comment.liking = false;
         
         // 更新点赞状态和数量
-        if (response.data) {
-          comment.isLiked = response.data.isLiked;
-          comment.likes = response.data.likes;
+        if (response.data && response.data.data) {
+          comment.isLiked = response.data.data.isLiked;
+          comment.likes = response.data.data.likes;
           
           this.$message.success(comment.isLiked ? '点赞成功' : '取消点赞成功');
         }
