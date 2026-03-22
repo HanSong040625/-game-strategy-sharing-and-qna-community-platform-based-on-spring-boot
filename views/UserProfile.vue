@@ -1,82 +1,124 @@
 <template>
-  <div class="user-profile-container">
-    <!-- 用户基本信息卡片 -->
-    <el-card class="user-info-card" shadow="hover">
-      <div class="user-header">
-        <!-- 用户基本信息 -->
-        <div class="user-details">
-          <h2 class="username">{{ userInfo.username }}</h2>
-          <div class="user-stats">
-            <div class="stat-item">
-              <span class="stat-label">关注</span>
-              <span class="stat-value">{{ userStats.followingCount || 0 }}</span>
+  <div>
+    <div class="user-profile-container">
+      <!-- 用户基本信息卡片 -->
+      <el-card class="user-info-card" shadow="hover">
+        <div class="user-header">
+          <!-- 用户基本信息 -->
+          <div class="user-details">
+            <h2 class="username">{{ userInfo.username }}</h2>
+            <div class="user-stats">
+              <div class="stat-item" @click="showFollowingList">
+                <span class="stat-label">关注</span>
+                <span class="stat-value">{{ userStats.followingCount || 0 }}</span>
+              </div>
+              <div class="stat-item" @click="showFollowersList">
+                <span class="stat-label">粉丝</span>
+                <span class="stat-value">{{ userStats.followersCount || 0 }}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">攻略</span>
+                <span class="stat-value">{{ userStats.guideCount || 0 }}</span>
+              </div>
             </div>
-            <div class="stat-item">
-              <span class="stat-label">粉丝</span>
-              <span class="stat-value">{{ userStats.followersCount || 0 }}</span>
+            
+            <!-- 关注按钮 -->
+            <div class="follow-section">
+              <el-button 
+                v-if="!isCurrentUser" 
+                :type="isFollowing ? 'info' : 'primary'" 
+                :loading="followLoading"
+                @click="handleFollowAction">
+                {{ isFollowing ? '已关注' : '关注' }}
+              </el-button>
+              <el-button v-else type="text" disabled>这是您自己</el-button>
+              <!-- 测试按钮 -->
+              <el-button type="warning" @click="showFollowingList">测试关注列表</el-button>
+              <el-button type="warning" @click="showFollowersList">测试粉丝列表</el-button>
             </div>
-            <div class="stat-item">
-              <span class="stat-label">攻略</span>
-              <span class="stat-value">{{ userStats.guideCount || 0 }}</span>
+          </div>
+        </div>
+      </el-card>
+
+      <!-- 用户内容区域 -->
+      <div class="user-content">
+        <!-- 攻略列表 -->
+        <el-card class="guides-section" shadow="hover">
+          <template #header>
+            <div class="section-header">
+              <h3>发布的攻略</h3>
+              <span class="guide-count">共 {{ guides.length }} 篇</span>
+            </div>
+          </template>
+          
+          <div v-if="guides.length > 0" class="guides-list">
+            <div v-for="guide in guides" :key="guide.id" class="guide-item">
+              <div class="guide-info">
+                <h4 class="guide-title">{{ guide.title }}</h4>
+                <p class="guide-summary">{{ guide.summary || '暂无描述' }}</p>
+                <div class="guide-meta">
+                  <el-tag v-if="guide.gameName" type="info" size="small">{{ guide.gameName }}</el-tag>
+                  <span class="create-time">{{ formatDate(guide.createTime) }}</span>
+                  <span class="view-count">
+                    <i class="el-icon-view"></i>
+                    {{ guide.viewCount || 0 }}
+                  </span>
+                  <span class="like-count">
+                    <i class="el-icon-star-on"></i>
+                    {{ guide.likeCount || 0 }}
+                  </span>
+                </div>
+              </div>
+              <div class="guide-actions">
+                <el-button type="primary" size="small" @click="viewGuideDetail(guide.id)">查看详情</el-button>
+              </div>
             </div>
           </div>
           
-          <!-- 关注按钮 -->
-          <div class="follow-section">
-            <el-button 
-              v-if="!isCurrentUser" 
-              :type="isFollowing ? 'info' : 'primary'" 
-              :loading="followLoading"
-              @click="handleFollowAction">
-              {{ isFollowing ? '已关注' : '关注' }}
-            </el-button>
-            <el-button v-else type="text" disabled>这是您自己</el-button>
+          <div v-else class="empty-state">
+            <i class="el-icon-document"></i>
+            <p>该用户还没有发布任何攻略</p>
+          </div>
+        </el-card>
+      </div>
+    </div>
+
+    <!-- 关系列表对话框 -->
+    <el-dialog
+      :title="relationshipDialog.title"
+      :visible.sync="relationshipDialog.visible"
+      width="600px"
+    >
+      <div class="relationship-dialog-content">
+        <div v-if="relationshipDialog.users.length === 0" class="empty-state">
+          <i class="el-icon-user"></i>
+          <p>{{ relationshipDialog.title === '关注列表' ? '还没有关注任何人' : '还没有粉丝' }}</p>
+        </div>
+        <div v-else class="relationship-list">
+          <div v-for="user in relationshipDialog.users" :key="user.id" class="user-item">
+            <div class="user-info">
+              <div class="user-avatar">
+                <img :src="getImageUrl(user.avatar)" :alt="user.username" class="avatar-image">
+              </div>
+              <div class="user-details">
+                <h4 class="username">{{ user.username }}</h4>
+                <p class="follow-time" v-if="user.followTime">
+                  {{ formatDate(user.followTime) }}
+                </p>
+              </div>
+            </div>
+            <div class="user-actions">
+              <el-button type="primary" size="small" @click="viewUserProfile(user.username)">
+                查看资料
+              </el-button>
+            </div>
           </div>
         </div>
       </div>
-    </el-card>
-
-    <!-- 用户内容区域 -->
-    <div class="user-content">
-      <!-- 攻略列表 -->
-      <el-card class="guides-section" shadow="hover">
-        <template #header>
-          <div class="section-header">
-            <h3>发布的攻略</h3>
-            <span class="guide-count">共 {{ guides.length }} 篇</span>
-          </div>
-        </template>
-        
-        <div v-if="guides.length > 0" class="guides-list">
-          <div v-for="guide in guides" :key="guide.id" class="guide-item">
-            <div class="guide-info">
-              <h4 class="guide-title">{{ guide.title }}</h4>
-              <p class="guide-summary">{{ guide.summary || '暂无描述' }}</p>
-              <div class="guide-meta">
-                <el-tag v-if="guide.gameName" type="info" size="small">{{ guide.gameName }}</el-tag>
-                <span class="create-time">{{ formatDate(guide.createTime) }}</span>
-                <span class="view-count">
-                  <i class="el-icon-view"></i>
-                  {{ guide.viewCount || 0 }}
-                </span>
-                <span class="like-count">
-                  <i class="el-icon-star-on"></i>
-                  {{ guide.likeCount || 0 }}
-                </span>
-              </div>
-            </div>
-            <div class="guide-actions">
-              <el-button type="primary" size="small" @click="viewGuideDetail(guide.id)">查看详情</el-button>
-            </div>
-          </div>
-        </div>
-        
-        <div v-else class="empty-state">
-          <i class="el-icon-document"></i>
-          <p>该用户还没有发布任何攻略</p>
-        </div>
-      </el-card>
-    </div>
+      <span slot="footer" class="dialog-footer">
+        <el-button @click="relationshipDialog.visible = false">关闭</el-button>
+      </span>
+    </el-dialog>
   </div>
 </template>
 
@@ -100,14 +142,24 @@ export default {
       // 用户统计信息
       userStats: {
         followingCount: 0,
-        followerCount: 0,
+        followersCount: 0,
         guideCount: 0
       },
       // 关注状态
       isFollowing: false,
       followLoading: false,
       // 攻略列表
-      guides: []
+      guides: [],
+      // 关注列表
+      followingList: [],
+      // 粉丝列表
+      followersList: [],
+      // 关系对话框
+      relationshipDialog: {
+        visible: false,
+        title: '',
+        users: []
+      }
     }
   },
   computed: {
@@ -210,17 +262,26 @@ export default {
       try {
         console.log('🔍 开始获取用户信息，当前userId:', this.userId);
         
-        // 如果userId是数字，直接使用；如果是用户名，先获取用户ID
+        // 如果userId为null或不是数字，先获取用户ID
         let targetUserId = this.userId;
-        if (isNaN(this.userId)) {
-          console.log('🔄 userId是用户名，需要先获取用户ID');
-          targetUserId = await this.getUserIdByUsername(this.userId);
+        if (!this.userId || isNaN(this.userId)) {
+          console.log('🔄 userId为null或不是数字，需要先获取用户ID');
+          // 从路由参数获取用户名
+          const username = this.$route.params.username;
+          if (!username) {
+            console.error('❌ 无法获取用户名，路由参数为空');
+            this.$message.error('用户不存在');
+            return;
+          }
+          targetUserId = await this.getUserIdByUsername(username);
           if (!targetUserId) {
             console.error('❌ 无法获取用户ID，用户可能不存在');
             this.$message.error('用户不存在');
             return;
           }
           console.log('✅ 成功获取到用户ID:', targetUserId);
+          // 更新userId
+          this.userId = targetUserId;
         }
         
         const token = localStorage.getItem('token');
@@ -341,7 +402,7 @@ export default {
           
           if (response.data.code === 200) {
             this.isFollowing = false;
-            this.userStats.followerCount = Math.max(0, this.userStats.followerCount - 1);
+            this.userStats.followersCount = Math.max(0, this.userStats.followersCount - 1);
             this.$message.success('取消关注成功');
           }
         } else {
@@ -350,7 +411,7 @@ export default {
           
           if (response.data.code === 200) {
             this.isFollowing = true;
-            this.userStats.followerCount += 1;
+            this.userStats.followersCount += 1;
             this.$message.success('关注成功');
           }
         }
@@ -369,9 +430,9 @@ export default {
         this.isFollowing = newFollowStatus;
         // 更新粉丝数量
         if (newFollowStatus) {
-          this.userStats.followerCount = (this.userStats.followerCount || 0) + 1;
+          this.userStats.followersCount = (this.userStats.followersCount || 0) + 1;
         } else {
-          this.userStats.followerCount = Math.max(0, (this.userStats.followerCount || 0) - 1);
+          this.userStats.followersCount = Math.max(0, (this.userStats.followersCount || 0) - 1);
         }
       }
       
@@ -432,15 +493,26 @@ export default {
       this.$router.push(`/guide/${guideId}`);
     },
 
+    // 查看用户资料
+    viewUserProfile(username) {
+      this.relationshipDialog.visible = false;
+      this.$router.push(`/user/${username}`);
+    },
+
     // 根据用户名获取用户ID（路由监听器专用）
     async getUserIdByUsernameForRoute(username) {
       try {
         console.log('🔍 路由监听器：开始根据用户名获取用户ID:', username);
+        if (!username) {
+          console.error('❌ 用户名参数为空');
+          this.$message.error('用户不存在');
+          return;
+        }
         const userId = await this.getUserIdByUsername(username);
         if (userId) {
           this.userId = userId;
           this.getCurrentUserId();
-          this.initPageData();
+          await this.initPageData();
         } else {
           console.error('❌ 无法获取用户ID，用户可能不存在');
           this.$message.error('用户不存在');
@@ -476,9 +548,98 @@ export default {
       }
     },
 
+    // 获取关注列表
+    async getFollowingList() {
+      try {
+        console.log('🔍 开始获取关注列表，用户ID:', this.userId);
+        const token = localStorage.getItem('token');
+        const response = await this.$axios.get(`/api/follow/following?userId=${this.userId}`, {
+          headers: {
+            'Authorization': token ? `Bearer ${token}` : ''
+          },
+          withCredentials: true
+        });
+        console.log('✅ 获取关注列表响应:', response.data);
+        if (response.data && response.data.code === 200 && response.data.data) {
+          this.followingList = response.data.data || [];
+          console.log('✅ 成功获取关注列表，数量:', this.followingList.length);
+        } else {
+          console.warn('⚠️ 获取关注列表响应码异常:', response.data ? response.data.code : '无响应数据');
+          this.followingList = [];
+        }
+      } catch (error) {
+        console.error('❌ 获取关注列表失败:', error);
+        this.followingList = [];
+      }
+    },
+
+    // 获取粉丝列表
+    async getFollowersList() {
+      try {
+        console.log('🔍 开始获取粉丝列表，用户ID:', this.userId);
+        const token = localStorage.getItem('token');
+        const response = await this.$axios.get(`/api/follow/followers?userId=${this.userId}`, {
+          headers: {
+            'Authorization': token ? `Bearer ${token}` : ''
+          },
+          withCredentials: true
+        });
+        console.log('✅ 获取粉丝列表响应:', response.data);
+        if (response.data && response.data.code === 200 && response.data.data) {
+          this.followersList = response.data.data || [];
+          console.log('✅ 成功获取粉丝列表，数量:', this.followersList.length);
+        } else {
+          console.warn('⚠️ 获取粉丝列表响应码异常:', response.data ? response.data.code : '无响应数据');
+          this.followersList = [];
+        }
+      } catch (error) {
+        console.error('❌ 获取粉丝列表失败:', error);
+        this.followersList = [];
+      }
+    },
+
+    // 显示关注列表
+    async showFollowingList() {
+      try {
+        console.log('🔍 开始显示关注列表');
+        // 先获取最新的关注列表数据
+        await this.getFollowingList();
+        console.log('✅ 关注列表数据已更新，数量:', this.followingList.length);
+        this.relationshipDialog.title = '关注列表';
+        this.relationshipDialog.users = this.followingList;
+        this.relationshipDialog.visible = true;
+        console.log('✅ 关注列表对话框已显示');
+      } catch (error) {
+        console.error('❌ 显示关注列表失败:', error);
+        this.$message.error('获取关注列表失败');
+      }
+    },
+
+    // 显示粉丝列表
+    async showFollowersList() {
+      try {
+        console.log('🔍 开始显示粉丝列表');
+        // 先获取最新的粉丝列表数据
+        await this.getFollowersList();
+        console.log('✅ 粉丝列表数据已更新，数量:', this.followersList.length);
+        this.relationshipDialog.title = '粉丝列表';
+        this.relationshipDialog.users = this.followersList;
+        this.relationshipDialog.visible = true;
+        console.log('✅ 粉丝列表对话框已显示');
+      } catch (error) {
+        console.error('❌ 显示粉丝列表失败:', error);
+        this.$message.error('获取粉丝列表失败');
+      }
+    },
+
     // 初始化页面数据
     async initPageData() {
       try {
+        console.log('🔍 开始初始化页面数据，用户ID:', this.userId);
+        if (!this.userId) {
+          console.error('❌ userId为空，无法初始化页面数据');
+          return;
+        }
         // 先获取用户基本信息，确保用户信息加载完成
         await this.getUserInfo();
         
@@ -486,9 +647,17 @@ export default {
         await this.getUserGuides();
         await this.getUserStats();
         
+        // 获取关注列表和粉丝列表
+        console.log('🔍 开始获取关注列表和粉丝列表');
+        await this.getFollowingList();
+        await this.getFollowersList();
+        console.log('✅ 关注列表数量:', this.followingList.length);
+        console.log('✅ 粉丝列表数量:', this.followersList.length);
+        
         if (!this.isCurrentUser) {
           await this.checkFollowStatus();
         }
+        console.log('✅ 页面数据初始化完成');
       } catch (error) {
         console.error('初始化页面数据失败:', error);
       }
@@ -512,7 +681,7 @@ export default {
     // 从路由参数获取用户名
     const username = this.$route.params.username;
     if (username) {
-      this.getUserIdByUsername(username);
+      this.getUserIdByUsernameForRoute(username);
     }
   }
 }
@@ -590,6 +759,15 @@ export default {
   font-size: 18px;
   font-weight: bold;
   color: #333;
+}
+
+.stat-item {
+  cursor: pointer;
+  transition: color 0.3s;
+}
+
+.stat-item:hover {
+  color: #409eff;
 }
 
 .follow-section {
@@ -751,6 +929,74 @@ export default {
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
+}
+
+.user-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.user-item:last-child {
+  border-bottom: none;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.user-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  overflow: hidden;
+  background-color: #f5f5f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.user-details {
+  flex: 1;
+}
+
+.user-details .username {
+  margin: 0 0 5px 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+}
+
+.follow-time {
+  margin: 0;
+  font-size: 12px;
+  color: #999;
+}
+
+.user-actions {
+  min-width: 100px;
+  text-align: right;
+}
+
+.relationship-dialog-content {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.relationship-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 @media (max-width: 768px) {
